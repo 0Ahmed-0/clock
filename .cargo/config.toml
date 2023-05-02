@@ -1,0 +1,11 @@
+[build]
+rustflags = ["--allow=unused_parens", "--allow=non_upper_case_globals"]
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+#panic = "abort"
+
+[profile.dev.package."*"]
+opt-level = 3
