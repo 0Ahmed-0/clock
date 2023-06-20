@@ -1,86 +1,83 @@
-pub fn input(prompt: &str, delimiter: &str) -> String {
-    use std::io::{stdin, stdout, Write};
+use std::{
+    io::{stdin, stdout, BufRead, Error, Write},
+    process::Command,
+    time::Duration,
+};
+pub const SECOND: Duration = Duration::from_secs(1);
 
-    let mut result = String::new();
-
-    if (delimiter == "\n") {
-        print("{}", &[prompt]);
-        stdout().flush();
-        stdin().read_line(&mut result);
-
-        return result[..result.len() - 1].to_string();
-    }
-
-    print("{}\n\n", &[prompt]);
-    loop {
-        let mut text = String::new();
-
-        stdin().read_line(&mut text);
-
-        result += &text;
-
-        if (text == "\n") {
-            continue;
-        }
-
-        let length = text.len();
-        if (&text[length - 2..length - 1] == delimiter) {
-            return result[..result.len() - 2].to_string();
-        }
-    }
-}
-//
-pub fn duration() -> std::time::Duration {
-    let mut result = Vec::<u64>::new();
+pub fn duration() -> Duration {
+    let mut h_m_s = Vec::<u32>::new();
 
     'Source: loop {
-        for part in input("\nSet up duration(%H:%M:%S): ", "\n").split(":") {
+        for part in input("Set up duration(%H:%M:%S): ", b'\n').split(':') {
             if (part == "") {
-                result.push(0);
+                h_m_s.push(0);
                 continue;
             }
+
             match part.parse() {
-                Ok(value) => result.push(value),
+                Ok(value) => h_m_s.push(value),
                 Err(error) => {
                     print("{}\n", &[error]);
-                    result.clear();
+                    h_m_s.clear();
                     continue 'Source;
-                }
+                },
             }
         }
 
-        if (result.len() != 3) {
-            print("Must be three values seperated by ':'\n", &[""]);
-            result.clear();
+        if (h_m_s.len() != 3) {
+            print::<u8>("Must be three values seperated by ':'\n", &[]);
+            h_m_s.clear();
             continue;
         }
 
-        return std::time::Duration::from_secs(result[0] * 3600 + result[1] * 60 + result[2]);
+        let (h, m, s) = (h_m_s[0], h_m_s[1], h_m_s[2]);
+        let (hs, cond1) = h.overflowing_mul(3600);
+        let (ms, cond2) = m.overflowing_mul(60);
+        let (hms, cond3) = hs.overflowing_add(ms);
+        let (seconds, cond4) = hms.overflowing_add(s);
+
+        if (cond1 || cond2 || cond3 || cond4) {
+            print::<u8>("Overflow(max 32 bits)\n", &[]);
+            continue;
+        }
+
+        return seconds * SECOND;
     }
 }
 //
-pub fn execute(commands: &str, sync: bool) {
-    let mut binding = std::process::Command::new("sh");
-    let command = binding.args(["-c", commands]);
+pub fn input(prompt: &str, delimiter: u8) -> String {
+    let mut buffer = Vec::<u8>::new();
+    print("{}", &[prompt]);
+    stdout().flush();
+    stdin().lock().read_until(delimiter, &mut buffer);
 
-    if sync {
-        command.spawn().unwrap().wait();
-    } else {
-        command.spawn();
+    return std::str::from_utf8(&buffer)
+        .unwrap()
+        .trim_end_matches(delimiter as char)
+        .to_owned();
+}
+//
+pub fn execute(commands: &str, sync: bool) -> Result<(), Error> {
+    let mut command = Command::new("sh").args(["-c", commands]).spawn()?;
+
+    if (sync) {
+        _ = command.wait()?;
     }
+
+    return Ok(());
 }
 //////////////////////////////////////////////////////////////////////
 pub fn print<Type: std::fmt::Display>(format: &str, objects: &[Type]) {
-    use std::io::{stdout, Write};
-
-    let mut content = String::from(format);
+    let mut output = format.to_owned();
 
     let mut index: usize = 0;
     let placeholders = format.split("{}").count() - 1;
     while (index < placeholders) {
-        content = content.replacen("{}", &(objects[index].to_string()), 1);
+        output = output.replacen("{}", &objects[index].to_string(), 1);
+
         index += 1;
     }
 
-    stdout().write(content.as_bytes());
+    stdout().write_all(output.as_bytes());
 }
