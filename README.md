@@ -1,1 +1,1 @@
-# Personally usefull clock
+# Personally useful clock
